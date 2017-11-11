@@ -6,6 +6,9 @@
 *.user
 *.userosscache
 *.sln.docstates
+*.sln.docstates
+pk.ppk
+cfg.xml
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
@@ -243,3 +246,4 @@ ModelManifest.xml
 
 # FAKE - F# Make
 .fake/
+/Files2Server/Cert/pk.pub
