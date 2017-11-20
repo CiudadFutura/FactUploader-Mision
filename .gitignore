@@ -8,7 +8,7 @@
 *.sln.docstates
 *.sln.docstates
 pk.ppk
-cfg.xml
+App.config
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs

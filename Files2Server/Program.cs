@@ -1,21 +1,24 @@
 ﻿using System;
-using System.Collections.Generic;
+using System.Configuration;
+using System.Data;
+using System.Data.OleDb;
+using System.IO;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using WinSCP;
 
 namespace Files2Server
 {
-    class Program
+    internal class Program
     {
+        private static readonly string FacturasPath = ConfigurationManager.AppSettings["rutaFacturas"].ToString(); 
 
-
-        static void Main(string[] args)
+        private static void Main(string[] args)
         {
 
             String certPath = System.IO.Directory.GetCurrentDirectory() + "\\pk.ppk";
-            String cfgPath = System.IO.Directory.GetCurrentDirectory() + "\\lastdate.cfg";
+            String cfgPath = System.IO.Directory.GetCurrentDirectory() + "\\ultimaExportacionFacturas.cfg";
+            String rutaFacturasWeb = ConfigurationManager.AppSettings["rutaFacturasWeb"].ToString();
+
             try
             {
                 if (!System.IO.File.Exists(certPath)) {
@@ -30,14 +33,17 @@ namespace Files2Server
                     hoy = DateTime.TryParse(System.IO.File.ReadAllText(cfgPath), out dt) ? dt.ToString("_yyMMdd") : "";
                 }
 
+                //Renombra archivos
+                RenombrarArchivosFacturas(hoy, dt);
+
                 // Setup session options
                 SessionOptions sessionOptions = new SessionOptions
                 {
                     Protocol = Protocol.Scp,
-                    HostName = config.getInstance().HostName,
-                    UserName = config.getInstance().UserName,
-                    PrivateKeyPassphrase = config.getInstance().PrivateKeyPassphrase,
-                    SshPrivateKeyPath = System.IO.Directory.GetCurrentDirectory() + "\\pk.ppk",
+                    HostName = ConfigurationManager.AppSettings["hostName"].ToString(),
+                    UserName = ConfigurationManager.AppSettings["userName"].ToString(),
+                    PrivateKeyPassphrase = ConfigurationManager.AppSettings["privateKeyPassphrase"].ToString(),
+                    SshPrivateKeyPath = certPath,
                     //TlsClientCertificatePath = "pk.ppk",
                     //SshHostKeyFingerprint = "" //ssh-rsa 2048 xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx
                     GiveUpSecurityAndAcceptAnySshHostKey = true,
@@ -50,15 +56,17 @@ namespace Files2Server
                     session.Open(sessionOptions);
                     Console.WriteLine("Conexion abierta");
                     // Upload files
-                    TransferOptions transferOptions = new TransferOptions();
-                    transferOptions.TransferMode = TransferMode.Binary;
-                    transferOptions.OverwriteMode = OverwriteMode.Overwrite;
+                    TransferOptions transferOptions = new TransferOptions
+                    {
+                        TransferMode = TransferMode.Binary,
+                        OverwriteMode = OverwriteMode.Overwrite,
+                    };
                     Console.WriteLine("Subiendo archivos.");
                     TransferOperationResult transferResult;
 
                     do
                     {
-                        transferResult = session.PutFiles(config.getInstance().OrgPath + "*" + hoy + "*.pdf", config.getInstance().DestPath, false, transferOptions);
+                        transferResult = session.PutFiles(FacturasPath + "FAC_*" + hoy + "*.pdf", rutaFacturasWeb, false, transferOptions);
                         dt = dt.AddDays(1);
                         hoy = dt.ToString("_yyMMdd");
                     } while (dt < DateTime.Now);
@@ -72,7 +80,7 @@ namespace Files2Server
                         Console.WriteLine("Subir {0} terminado", transfer.FileName);
                     }
                 }
-                System.IO.File.WriteAllText(cfgPath, DateTime.Now.ToString());
+                File.WriteAllText(cfgPath, DateTime.Now.ToString());
             }
             catch (Exception e)
             {
@@ -88,6 +96,89 @@ namespace Files2Server
         private static void Session_FileTransferred(object sender, TransferEventArgs e)
         {
             Console.WriteLine("Archivo {0} transferido: {1}", e.FileName, e.Error == null ? "OK" : e.Error.Message);
+        }
+
+        private static void RenombrarArchivosFacturas(string hoy, DateTime dt)
+        {
+
+            var rutaArchivosDbf = ConfigurationManager.AppSettings["rutaArchivos"].ToString();
+            var rutaTablasDbf = ConfigurationManager.AppSettings["rutaTablas"].ToString();
+            var archivoRemitosDbf = ConfigurationManager.AppSettings["dbfRemitos"].ToString();
+
+            File.Delete(rutaTablasDbf + archivoRemitosDbf);
+            File.Copy(rutaArchivosDbf + archivoRemitosDbf, rutaTablasDbf + archivoRemitosDbf);
+
+            do
+            {
+                var facturas = Directory.GetFiles(FacturasPath, "FAC0*" + hoy + "*.pdf", SearchOption.TopDirectoryOnly);
+                dt = dt.AddDays(1);
+                hoy = dt.ToString("_yyMMdd");
+
+                foreach (var factura in facturas)
+                {
+                    try
+                    {
+                        var nroMov = factura.Substring(factura.IndexOf("\\FAC0") + 4, 12);
+                        Console.WriteLine("Renombrando el archivo de factura: " + factura);
+                        //SELECCIONAR nroMovRemito a partir de nroMovFactura
+                        var sConArchivos = ConfigurationManager.AppSettings["stringConexion"].Replace("{0}", rutaTablasDbf);
+                        var sqlRemitoPorNroMovFactura = string.Format(ConfigurationManager.AppSettings["remitoPorNroMovFactura"],
+                            archivoRemitosDbf, nroMov);
+                        var tabla = new DataTable();
+                        //Console.WriteLine(sqlRemitoPorNroMovFactura);
+                        var conexion = new OleDbConnection(sConArchivos);
+                        conexion.Open();
+
+                        var comando = new OleDbCommand
+                        {
+                            Connection = conexion,
+                            CommandText = sqlRemitoPorNroMovFactura,
+                            CommandType = CommandType.Text
+                        };
+
+                        var da = new OleDbDataAdapter(comando);
+                        da.Fill(tabla);
+                        var nroRemito = tabla.AsEnumerable().Select(r => r.Field<decimal>("NROMOVI")).FirstOrDefault();
+                        conexion.Close();
+                        //Console.WriteLine(nroRemito);
+                        if (nroRemito == 0) continue;
+
+                        //SELECCIONAR nroPedidoWeb a partir de nroMovRemito
+                        var sConTablas = ConfigurationManager.AppSettings["stringConexion"].Replace("{0}", rutaTablasDbf);
+                        var archivoDbf = ConfigurationManager.AppSettings["dbfPedidos"];
+                        var sqlPedidoPorNroMov = string.Format(ConfigurationManager.AppSettings["pedidoPorNroMov"], archivoDbf,
+                            nroRemito);
+                        tabla = new DataTable();
+                        //Console.WriteLine(sqlPedidoPorNroMov);
+                        conexion = new OleDbConnection(sConTablas);
+                        conexion.Open();
+
+                        comando = new OleDbCommand
+                        {
+                            Connection = conexion,
+                            CommandText = sqlPedidoPorNroMov,
+                            CommandType = CommandType.Text
+                        };
+                        da = new OleDbDataAdapter(comando);
+                        da.Fill(tabla);
+                        var nroPedidoWeb = tabla.AsEnumerable().Select(r => r.Field<string>("NROPEDIDO").TrimEnd()).FirstOrDefault();
+
+                        conexion.Close();
+                        //Console.WriteLine(nroPedidoWeb);
+                        long nroPedidoWebNum;
+                        if (!long.TryParse(nroPedidoWeb, out nroPedidoWebNum)) continue;
+
+                        File.Move(factura, factura.Replace("\\FAC0", "\\FAC_" + nroPedidoWebNum + "_0"));
+                    }
+                    catch (Exception)
+                    {
+                        //Console.WriteLine("Error renombrando el archivo de factura: " + factura);
+                    }
+                }
+
+            } while (dt <= DateTime.Now);
+
+            File.Delete(rutaTablasDbf + archivoRemitosDbf);
         }
     }
 }
