@@ -56,10 +56,10 @@ namespace Files2Server
 				using (Session session = new Session())
 				{
 					session.FileTransferred += Session_FileTransferred;
-					// Connect
+					// Conectar
 					session.Open(sessionOptions);
 					Console.WriteLine("Conexion abierta");
-					// Upload files
+					// Actualizar archivos
 					TransferOptions transferOptions = new TransferOptions
 					{
 						TransferMode = TransferMode.Binary,
@@ -75,16 +75,18 @@ namespace Files2Server
 						hoy = dt.ToString("_yyMMdd");
 					} while (dt < DateTime.Now);
 
-					// Throw on any error
+					// Dispara algún error
 					transferResult.Check();
 
-					// Print results
+					// Mostrar resultados
 					foreach (TransferEventArgs transfer in transferResult.Transfers)
 					{
 						Console.WriteLine("Subir {0} terminado", transfer.FileName);
 					}
+
+					Console.WriteLine("Se han enviado {0} archivos de facturas.", transferResult.Transfers.Count);
 				}
-				File.WriteAllText(cfgPath, DateTime.Now.ToString());
+				File.WriteAllText(cfgPath, DateTime.Now.ToString("yyyy-MM-dd"));
 			}
 			catch (Exception e)
 			{
@@ -99,7 +101,7 @@ namespace Files2Server
 
 		private static void Session_FileTransferred(object sender, TransferEventArgs e)
 		{
-			Console.WriteLine("Archivo {0} transferido: {1}", e.FileName, e.Error == null ? "OK" : e.Error.Message);
+			Console.WriteLine("Archivo {0} transferido: {1}", e.FileName, e.Error == null ? "Correcto" : e.Error.Message);
 		}
 
 		private static void RenombrarArchivosFacturas(string hoy, DateTime dt)
@@ -111,8 +113,12 @@ namespace Files2Server
 			var rutaTablasDbf = ConfigurationManager.AppSettings["rutaTablas"];
 			var archivoRemitosDbf = ConfigurationManager.AppSettings["dbfRemitos"];
 
+			//Eliminamos copia previa de MOVART 
 			File.Delete(rutaTablasDbf + archivoRemitosDbf);
+			//Traemos copia de MOVART porque no podemos acceder al original
 			File.Copy(rutaArchivosDbf + archivoRemitosDbf, rutaTablasDbf + archivoRemitosDbf);
+
+			var contador = 0;
 
 			do
 			{
@@ -176,16 +182,21 @@ namespace Files2Server
 
 						var nuevoNombre = factura.Replace("\\FAC0", "\\FAC_" + nroPedidoWebNum + "_0");
 						File.Move(factura, nuevoNombre.Substring(0, nuevoNombre.Length - 30) + ".pdf");
+
+						contador += 1;
 					}
 					catch (Exception)
 					{
-						Console.WriteLine("Error renombrando el archivo de factura: " + factura);
+						Console.WriteLine("Error renombrando el archivo de factura: {0}", factura);
 					}
 				}
 
 			} while (dt <= DateTime.Now);
 
+			//Eliminamos copia previa de MOVART 
 			File.Delete(rutaTablasDbf + archivoRemitosDbf);
+
+			Console.WriteLine("Se han renombrado {0} archivos de facturas.", contador);
 		}
 	}
 }
