@@ -38,7 +38,7 @@ jobs:
       - name: Compress files
         uses: papeloto/action-zip@v1
         with:
-          files: FactUploader-Mision/Files2Server/bin/Release/
+          files: D:\a\FactUploader-Mision\FactUploader-Mision\Files2Server\bin\Release\
           recursive: true
           dest: Files2Server.zip
       
