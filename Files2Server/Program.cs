@@ -122,7 +122,7 @@ namespace Files2Server
 
 			do
 			{
-				var facturas = Directory.GetFiles(FacturasPath, "FACTRLOR-C-*" + hoy + "*.pdf", SearchOption.TopDirectoryOnly);
+				var facturas = Directory.GetFiles(FacturasPath, "FACTLOTR-C-*" + hoy + "*.pdf", SearchOption.TopDirectoryOnly);
 				dt = dt.AddDays(1);
 				hoy = dt.ToString("_yyMMdd");
 
@@ -130,7 +130,7 @@ namespace Files2Server
 				{
 					try
 					{
-						var nroMov = factura.Substring(factura.IndexOf("\\FACTRLOR-C-") + 12, 12);
+						var nroMov = factura.Substring(factura.IndexOf("\\FACTLOTR-C-") + 12, 12);
 						Console.WriteLine("Renombrando el archivo de factura: " + factura);
 						//SELECCIONAR nroMovRemito a partir de nroMovFactura
 						var sConArchivos = ConfigurationManager.AppSettings["stringConexion"].Replace("{0}", rutaTablasDbf);
@@ -180,7 +180,7 @@ namespace Files2Server
 						long nroPedidoWebNum;
 						if (!long.TryParse(nroPedidoWeb, out nroPedidoWebNum)) continue;
 
-						var nuevoNombre = factura.Replace("\\FACTRLOR-C-", "\\FAC_" + nroPedidoWebNum + "_0");
+						var nuevoNombre = factura.Replace("\\FACTLOTR-C-", "\\FAC_" + nroPedidoWebNum + "_0");
 						File.Move(factura, nuevoNombre.Substring(0, nuevoNombre.Length - 30) + ".pdf");
 
 						contador += 1;
